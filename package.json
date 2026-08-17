@@ -1,0 +1,43 @@
+{
+  "name": "trueline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file-if-exists=.env.local db/migrate.mjs",
+    "db:seed": "node --env-file-if-exists=.env.local db/migrate.mjs --seed && node --env-file-if-exists=.env.local scripts/seed-files.mjs",
+    "db:status": "node --env-file-if-exists=.env.local db/migrate.mjs --status",
+    "test:extraction": "tsx --env-file-if-exists=.env.local scripts/test-extraction.ts",
+    "test:api": "./scripts/smoke-test.sh",
+    "samples": "node scripts/make-samples.mjs samples",
+    "check:claude": "tsx --env-file-if-exists=.env.local scripts/check-claude.ts",
+    "shoot": "./scripts/shoot.sh",
+    "test:auth": "tsx --env-file-if-exists=.env.local scripts/test-auth.ts",
+    "test:integration": "tsx --env-file-if-exists=.env.local scripts/test-integration.ts",
+    "test": "./scripts/test-all.sh",
+    "seed:live": "tsx --env-file-if-exists=.env.local scripts/seed-from-live.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "drizzle-orm": "^0.44.5",
+    "next": "15.5.4",
+    "pg": "^8.16.3",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "tailwindcss": "^4.3.3",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/pg": "^8.15.5",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.2"
+  }
+}
