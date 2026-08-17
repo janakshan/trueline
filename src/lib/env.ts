@@ -45,6 +45,18 @@ const envSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
 
+  /**
+   * Spend guards for the one endpoint that costs money. Enforced against
+   * Postgres in src/lib/extraction/spend-guard.ts, so they hold across
+   * serverless instances — unlike the in-memory limiter, which cannot.
+   *
+   * At roughly $0.02 a call, the defaults cap a public demo near $4/month.
+   * These are the app's own limits; the authoritative one is the workspace
+   * spend limit in the Anthropic Console.
+   */
+  EXTRACTION_HOURLY_CLIENT_CAP: z.coerce.number().int().min(1).max(1000).default(10),
+  EXTRACTION_MONTHLY_CAP: z.coerce.number().int().min(1).max(100_000).default(200),
+
   /** Tuning knobs, so cost/quality can change without a code edit. */
   EXTRACTION_MODEL: z.string().default("claude-opus-5"),
   EXTRACTION_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).default("medium"),

@@ -17,6 +17,7 @@
     "check:claude": "tsx --env-file-if-exists=.env.local scripts/check-claude.ts",
     "shoot": "./scripts/shoot.sh",
     "test:auth": "tsx --env-file-if-exists=.env.local scripts/test-auth.ts",
+    "test:spend-guard": "tsx --env-file-if-exists=.env.local scripts/test-spend-guard.ts",
     "test:integration": "tsx --env-file-if-exists=.env.local scripts/test-integration.ts",
     "test": "./scripts/test-all.sh",
     "seed:live": "tsx --env-file-if-exists=.env.local scripts/seed-from-live.ts"

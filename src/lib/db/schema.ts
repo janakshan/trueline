@@ -13,9 +13,9 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * Mirrors db/migrations/0001_init.sql. The SQL is the source of truth; this
- * file exists so queries are typed. Regenerate with `drizzle-kit pull` after
- * changing a migration rather than editing both by hand.
+ * Mirrors db/migrations/*.sql. The SQL is the source of truth; this file exists
+ * so queries are typed. Regenerate with `drizzle-kit pull` after changing a
+ * migration rather than editing both by hand.
  */
 
 export const DOCUMENT_STATUSES = [
@@ -165,3 +165,26 @@ export const extractions = pgTable(
 export type DocumentRow = typeof documents.$inferSelect;
 export type NewDocumentRow = typeof documents.$inferInsert;
 export type ExtractionRow = typeof extractions.$inferSelect;
+
+/**
+ * Mirrors db/migrations/0002_extraction_usage.sql.
+ *
+ * One row per billable extraction attempt. The in-memory limiter cannot bound
+ * spend across serverless instances, so the money guard reads and writes here.
+ */
+export const extractionUsage = pgTable(
+  "extraction_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientKey: text("client_key").notNull(),
+    userId: uuid("user_id"),
+    documentId: uuid("document_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("extraction_usage_client_created_idx").on(t.clientKey, t.createdAt),
+    index("extraction_usage_created_idx").on(t.createdAt),
+  ],
+);
+
+export type ExtractionUsageRow = typeof extractionUsage.$inferSelect;

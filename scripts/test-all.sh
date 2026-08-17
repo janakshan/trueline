@@ -11,6 +11,7 @@ run() {
 run "typecheck"          npx tsc --noEmit
 run "parser + pipeline"  npx tsx --env-file-if-exists=.env.local scripts/test-extraction.ts
 run "auth coverage"      npx tsx --env-file-if-exists=.env.local scripts/test-auth.ts
+run "spend guard"        npx tsx --env-file-if-exists=.env.local scripts/test-spend-guard.ts
 run "api smoke"          ./scripts/smoke-test.sh
 run "integration"        npx tsx --env-file-if-exists=.env.local scripts/test-integration.ts
 printf '\n\033[1m━━━ summary ━━━\033[0m\n'

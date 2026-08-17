@@ -132,12 +132,13 @@ Open <http://localhost:3000> and click **Try the demo** — it mints the session
 
 ## Tests
 
-`npm test` runs a typecheck plus four suites — **170 assertions**, all passing:
+`npm test` runs a typecheck plus five suites — **179 assertions**, all passing:
 
 | Suite | | Covers |
 |---|---|---|
 | parser + pipeline | 98 | schema generation, defensive parsing, validation, retry paths, atomic claim |
 | auth coverage | 16 | 9 method+path combinations, page redirects, forged and expired session cookies |
+| spend guard | 9 | per-client hourly cap, deployment monthly cap, sliding window |
 | api smoke | 29 | every route's success and rejection cases |
 | integration | 27 | upload → extract → correct → approve → export, end to end |
 
@@ -156,7 +157,7 @@ The API suite tags its own uploads with a `zz-smoke-` filename prefix and cleans
 **Known gaps, honestly:**
 
 - **`npm run db:seed` leaves 4 of 5 document previews 404ing.** `scripts/seed-files.mjs` copies the samples to `.storage/samples/`, but `db/seed.sql` — regenerated later from live extractions — points those rows at `documents/<id>/<filename>`. The fields and flags all render correctly; only the preview pane is affected.
-- **No rate limiting on the extract route.** Sign-in is rate limited; extraction is not, which is the top risk for a publicly reachable demo.
+- **The spend caps are check-then-record, not atomic.** Two simultaneous requests can both take the last slot, overshooting a cap by about the number of concurrent callers. Holding a transaction open across a 50-second API call would cost a connection to save a cent, so the Console spend limit is the backstop instead.
 - **Accuracy is not benchmarked.** The samples show the workflow, not a claimed extraction accuracy figure. Cost measured at roughly $0.02 per single-page sample — re-measure before quoting anything for dense multi-page scans.
 - **Verified on stock Postgres 16, not on Neon.** Nothing here uses an exotic feature, but connection-level behaviour is the part a local container can't exercise.
 - **`page_count` is always null**, and the prompt is untuned — `PROMPT_VERSION` is recorded on every row so the effect of a change is measurable once there's real output to compare.

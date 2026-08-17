@@ -6,6 +6,10 @@ import { db } from "@/lib/db/client";
 import { documents, extractions } from "@/lib/db/schema";
 import { toDocumentDetail } from "@/lib/documents/serialize";
 import { MAX_ATTEMPTS, runExtraction } from "@/lib/extraction/run";
+import {
+  assertExtractionBudget,
+  recordExtractionUsage,
+} from "@/lib/extraction/spend-guard";
 import { AppError, badRequest, notFound } from "@/lib/http/errors";
 import { ok, route } from "@/lib/http/respond";
 
@@ -39,12 +43,21 @@ export const POST = route<Context>(async (request, context) => {
   // The only endpoint that spends money. The per-document attempt cap (3) does
   // not bound total spend, because a caller can upload unlimited documents and
   // extract each of them — so the limit has to be per client, not per document.
-  // At roughly $0.0085 a call this caps one client at about $0.17 an hour.
-  enforceRateLimit(clientKey(request, "extract"), { limit: 20, windowMs: 60 * 60 * 1000 });
+  //
+  // Cheap in-memory check first: it rejects a flood without touching the
+  // database. It cannot bound spend on its own (instances do not share the Map,
+  // cold starts reset it), so the durable guard below is what actually holds.
+  const key = clientKey(request, "extract");
+  enforceRateLimit(key, { limit: 20, windowMs: 60 * 60 * 1000 });
 
   const parsed = paramsSchema.safeParse(await context.params);
   if (!parsed.success) throw badRequest("Document id must be a UUID.");
   const documentId = parsed.data.id;
+
+  // Postgres-backed, so it survives cold starts and holds across instances:
+  // per-client hourly, and a monthly ceiling for the whole deployment. A
+  // read-only check — budget is only spent once a call actually happens.
+  await assertExtractionBudget(key);
 
   const outcome = await runExtraction(documentId, userId);
 
@@ -71,6 +84,12 @@ export const POST = route<Context>(async (request, context) => {
       status: existing.status,
     });
   }
+
+  // Past the null branch the document was claimed, which means the API call
+  // happened — so it cost money and consumes budget, success or failure. A
+  // document that could not be claimed never reaches here, or hammering one
+  // dead document would drain the month's cap without spending a cent.
+  await recordExtractionUsage({ clientKey: key, userId, documentId });
 
   const [row] = await db
     .select({ document: documents, extraction: extractions })
