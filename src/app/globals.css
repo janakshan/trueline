@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+/**
+ * Design tokens from ui-plan.md.
+ *
+ * Semantic names, not palette names. `bg-review-bg` says what it means;
+ * `bg-amber-50` invites someone to reach for amber as decoration and quietly
+ * break the rule the review screen depends on — amber means "a human should
+ * look at this", and nothing else.
+ *
+ * Dark mode is phase 2. Because these are semantic, it is a redefinition of
+ * ~20 variables rather than a rewrite.
+ */
+@theme {
+  /* Neutral — warm stone reads less clinical than pure grey */
+  --color-surface: #ffffff;
+  --color-surface-sunken: #fafaf9;
+  --color-surface-hover: #f5f5f4;
+  --color-border: #e7e5e4;
+  --color-border-strong: #d6d3d1;
+  --color-ink: #1c1917;
+  --color-muted: #57534e;
+  --color-subtle: #a8a29e;
+
+  /* Ink — primary action */
+  --color-primary: #1c1917;
+  --color-primary-hover: #292524;
+  --color-primary-fg: #ffffff;
+
+  /* Blue — focus and links ONLY, never buttons */
+  --color-focus: #2551d9;
+  --color-link: #1c3fae;
+
+  /* Amber — "check this field" */
+  --color-review-bg: #fef9ec;
+  --color-review-border: #d9820b;
+  --color-review-text: #92500a;
+
+  /* Red — conflict / failure */
+  --color-conflict-bg: #fef2f2;
+  --color-conflict-border: #dc2626;
+  --color-conflict-text: #b01818;
+
+  /* Green — approved */
+  --color-approved-bg: #f0fdf4;
+  --color-approved-border: #16a34a;
+  --color-approved-text: #15803d;
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* 11px eyebrow/label size the default scale lacks */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+  --radius-modal: 14px;
+
+  /* Three shadows total. Borders carry structure; shadow means "floating". */
+  --shadow-sm: 0 1px 2px 0 rgb(28 25 23 / 0.06), 0 1px 3px 0 rgb(28 25 23 / 0.08);
+  --shadow-md: 0 4px 12px -2px rgb(28 25 23 / 0.10), 0 2px 6px -2px rgb(28 25 23 / 0.06);
+  --shadow-lg: 0 12px 32px -8px rgb(28 25 23 / 0.18);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-surface-sunken);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Every figure aligns in a column. Non-tabular numerals in a money column
+     are the fastest way to make a finance tool look amateur.
+     Two variants: dates and counts stay in Plex Sans (which has tabular
+     figures) because monospaced dates read clunky; money and IDs go mono,
+     where the fixed width is doing visible work. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabular-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Visible focus everywhere. Never `outline: none` without a replacement. */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* iOS Safari zooms the viewport on focus for inputs under 16px. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+}
+
+@layer utilities {
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-surface-hover);
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .pulse-dot {
+    animation: pulse-dot 1.4s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .skeleton::after {
+    display: none;
+  }
+}
