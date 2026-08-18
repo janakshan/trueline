@@ -39,9 +39,9 @@ cd trueline
 # One-off, in this shell only — do not put the production URL in .env.local
 export DATABASE_URL="postgres://…-pooler….neon.tech/trueline?sslmode=require"
 
-npm run db:status     # expect: 0001, 0002 pending
+npm run db:status     # expect: 0001, 0002, 0003 pending
 npm run db:migrate
-npm run db:status     # expect: both applied, none pending
+npm run db:status     # expect: all applied, none pending
 ```
 
 Then seed the demo account and its five sample documents:
@@ -61,9 +61,9 @@ npm run db:seed
 - The schema was verified on stock Postgres 16 in Docker, not on Neon. Nothing
   here uses an exotic feature, but `db:migrate` is the first real test —
   run it before wiring up Vercel, while a mistake is still cheap.
-- After seeding, four of the five document previews will 404. `scripts/seed-files.mjs`
-  copies samples into `.storage/samples/`, but `db/seed.sql` points those rows at
-  `documents/<id>/<filename>`. On Vercel it is moot — see step 6.
+- Run `npm run samples` before `db:seed` if you have not already: the seed reads
+  the generated sample PDFs and writes their bytes into storage, and warns rather
+  than fails if they are missing.
 
 ---
 
@@ -91,7 +91,7 @@ Vercel → Project → **Settings → Environment Variables**. Set these for
 | `EXTRACTION_MONTHLY_CAP` | `200` | no |
 | `EXTRACTION_HOURLY_CLIENT_CAP` | `10` | no |
 | `EXTRACTION_MODEL` | `claude-sonnet-5` if you want cheaper than the `claude-opus-5` default | no |
-| `STORAGE_DIR` | `/tmp/storage` — see step 6 | recommended |
+| `STORAGE_TOTAL_CAP_MB` | `200` — total bytes held before uploads are refused | no |
 
 ¹ Optional by design. Without it the site still works: sign-in, the seeded
 documents, review, and export all run; only a *new* extraction fails, with a
@@ -169,21 +169,23 @@ where created_at >= date_trunc('month', now());
 
 ---
 
-## 6. File storage on Vercel
+## 6. File storage
 
-Vercel's filesystem is read-only except `/tmp`, and `/tmp` does not survive
-between invocations. So set `STORAGE_DIR=/tmp/storage` and expect:
+Nothing to configure. Uploaded files live in Postgres (`file_blobs`), because
+Vercel's filesystem is read-only apart from `/tmp`, and `/tmp` is neither shared
+between instances nor kept between invocations — an upload lands on one instance
+and the extraction that reads it back runs on another and finds nothing.
 
-- **uploads work** — you can upload, extract, review and export within a session;
-- **previews 404 after a cold start**, because the bytes are gone.
+This is also why `npm run db:seed` is all it takes to give the deployed demo its
+sample documents: the seed writes the bytes into the same table, so previews work
+the moment it finishes.
 
-The five seeded documents show real extracted data regardless, since extractions
-live in Postgres, not on disk. For a portfolio demo that is an acceptable
-limitation and honestly stated in the README. The real fix is Vercel Blob:
-`src/lib/storage/index.ts` is a three-method interface behind which the local
-disk sits, so swapping it is one file plus a token route.
+Optional: `STORAGE_TOTAL_CAP_MB` (default 200) caps the total held before uploads
+are refused. The 10 MB per-file limit does not bound the total on its own, and
+Neon's free tier is 0.5 GB.
 
----
+`src/lib/storage/index.ts` remains a four-method interface, so moving to Vercel
+Blob or S3 later is a change to that one file plus a token.
 
 ## 7. Deploy, then point the domain
 

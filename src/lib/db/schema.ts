@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -188,3 +189,26 @@ export const extractionUsage = pgTable(
 );
 
 export type ExtractionUsageRow = typeof extractionUsage.$inferSelect;
+
+/**
+ * Mirrors db/migrations/0003_file_blobs.sql.
+ *
+ * Drizzle has no bytea column builder, so this declares one. Node's Buffer is
+ * what `pg` returns for bytea and what the storage interface passes around.
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+export const fileBlobs = pgTable(
+  "file_blobs",
+  {
+    storageKey: text("storage_key").primaryKey(),
+    bytes: bytea("bytes").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("file_blobs_created_idx").on(t.createdAt)],
+);
+
+export type FileBlobRow = typeof fileBlobs.$inferSelect;

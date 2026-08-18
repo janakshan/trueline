@@ -1,48 +1,77 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
-import { env } from "@/lib/env";
+import { join } from "node:path";
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { fileBlobs } from "@/lib/db/schema";
 
 /**
- * Minimal storage seam. Local filesystem today; Vercel Blob later without
- * touching any route — architecture.md's client-direct upload path swaps the
- * implementation here and adds a token route, and nothing else changes.
+ * Storage seam. Postgres today; object storage later without touching a route.
+ *
+ * This was the local filesystem, which cannot work on a serverless host: the
+ * only writable path is /tmp, and /tmp is neither shared between instances nor
+ * kept between invocations. An upload landed on one instance and the extraction
+ * that read it back ran on another and found nothing — uploads returned 201 and
+ * then failed with "the uploaded file could not be read", and every seeded
+ * preview 404'd because the seed had written bytes to a laptop.
+ *
+ * Postgres is not where blobs belong at scale. For a demo whose files are
+ * single-page invoices it costs nothing to operate, behaves identically in
+ * development and production, and lets `db:seed` carry its own bytes. The
+ * interface below is unchanged, so the swap to Vercel Blob or S3 stays a change
+ * to this file plus a token.
  */
 export interface Storage {
   put(key: string, bytes: Buffer): Promise<void>;
   get(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
+  /** Total bytes held, for the upload cap. */
+  totalBytes(): Promise<number>;
 }
 
-const ROOT = resolve(process.cwd(), env.STORAGE_DIR);
-
-/**
- * Storage keys are built server-side from a UUID, never taken from user input,
- * but this resolves and re-checks anyway. A path check that only runs when you
- * remember to call it is the one that eventually gets skipped.
- */
-function safePath(key: string): string {
-  const full = resolve(ROOT, key);
-  if (full !== ROOT && !full.startsWith(ROOT + sep)) {
-    throw new Error(`Storage key escapes the storage root: ${key}`);
+/** Thrown when a key has no stored object, so callers can tell it from a real fault. */
+export class StorageObjectNotFound extends Error {
+  constructor(key: string) {
+    super(`No stored object for key: ${key}`);
+    this.name = "StorageObjectNotFound";
   }
-  return full;
 }
 
-export const localStorage: Storage = {
+export const postgresStorage: Storage = {
   async put(key, bytes) {
-    const full = safePath(key);
-    await mkdir(dirname(full), { recursive: true });
-    await writeFile(full, bytes);
+    // Upsert: re-extracting or re-uploading the same document must not collide
+    // with the row a previous attempt left behind.
+    await db
+      .insert(fileBlobs)
+      .values({ storageKey: key, bytes, byteSize: bytes.byteLength })
+      .onConflictDoUpdate({
+        target: fileBlobs.storageKey,
+        set: { bytes, byteSize: bytes.byteLength },
+      });
   },
+
   async get(key) {
-    return readFile(safePath(key));
+    const [row] = await db
+      .select({ bytes: fileBlobs.bytes })
+      .from(fileBlobs)
+      .where(eq(fileBlobs.storageKey, key))
+      .limit(1);
+
+    if (!row) throw new StorageObjectNotFound(key);
+    return row.bytes;
   },
+
   async delete(key) {
-    await rm(safePath(key), { force: true });
+    await db.delete(fileBlobs).where(eq(fileBlobs.storageKey, key));
+  },
+
+  async totalBytes() {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${fileBlobs.byteSize}), 0)` })
+      .from(fileBlobs);
+    return Number(row?.total ?? 0);
   },
 };
 
-export const storage: Storage = localStorage;
+export const storage: Storage = postgresStorage;
 
 /** `documents/<documentId>/<sanitised filename>` */
 export function buildStorageKey(documentId: string, filename: string): string {

@@ -32,7 +32,7 @@ npm run dev -- --port 3111
 ./scripts/smoke-test.sh      # 27 assertions
 ```
 
-`.env.local` needs `DATABASE_URL`, `SESSION_SECRET` (≥32 chars), `STORAGE_DIR`.
+`.env.local` needs `DATABASE_URL` and `SESSION_SECRET` (≥32 chars). Uploaded files live in Postgres, not on disk.
 
 ---
 

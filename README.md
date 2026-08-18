@@ -156,7 +156,7 @@ The API suite tags its own uploads with a `zz-smoke-` filename prefix and cleans
 
 **Known gaps, honestly:**
 
-- **`npm run db:seed` leaves 4 of 5 document previews 404ing.** `scripts/seed-files.mjs` copies the samples to `.storage/samples/`, but `db/seed.sql` — regenerated later from live extractions — points those rows at `documents/<id>/<filename>`. The fields and flags all render correctly; only the preview pane is affected.
+- **Uploaded files are stored in Postgres, which is not where blobs belong at scale.** A serverless filesystem is not shared between instances and does not survive between invocations, so local disk broke the moment this deployed. For single-page invoices on a demo it costs nothing to operate and makes the seed self-contained; `src/lib/storage` stays a four-method interface so the move to object storage is one file.
 - **The spend caps are check-then-record, not atomic.** Two simultaneous requests can both take the last slot, overshooting a cap by about the number of concurrent callers. Holding a transaction open across a 50-second API call would cost a connection to save a cent, so the Console spend limit is the backstop instead.
 - **Accuracy is not benchmarked.** The samples show the workflow, not a claimed extraction accuracy figure. Cost measured at roughly $0.02 per single-page sample — re-measure before quoting anything for dense multi-page scans.
 - **Verified on stock Postgres 16, not on Neon.** Nothing here uses an exotic feature, but connection-level behaviour is the part a local container can't exercise.

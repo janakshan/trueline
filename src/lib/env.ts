@@ -23,7 +23,13 @@ const envSchema = z.object({
   SESSION_SECRET: z
     .string()
     .min(32, "SESSION_SECRET must be at least 32 characters"),
-  STORAGE_DIR: z.string().default(".storage"),
+  /**
+   * Total bytes the demo will hold before refusing uploads. Files live in
+   * Postgres (see src/lib/storage), and Neon's free tier is 0.5 GB — an upload
+   * limit alone does not bound the total, because nothing stops a visitor
+   * uploading repeatedly.
+   */
+  STORAGE_TOTAL_CAP_MB: z.coerce.number().int().min(1).max(100_000).default(200),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
   /**

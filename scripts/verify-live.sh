@@ -131,6 +131,20 @@ check "review page renders"                  "$(status -b "$JAR" "$BASE/document
 check "unknown document is a 404"            "$(status -b "$JAR" "$BASE/api/documents/$MISSING")" 404
 check "non-uuid id is rejected"              "$(status -b "$JAR" "$BASE/api/documents/not-a-uuid")" 400
 
+printf '\n\033[1mStored files are readable\033[0m\n'
+# Storage lives in Postgres precisely because a serverless filesystem does not
+# survive between invocations. This is the check that would have caught the
+# uploads returning 201 and then failing with "could not be read": every seeded
+# document must serve its bytes back on a cold instance, not just the one that
+# happened to write them.
+PREVIEW_OK=0
+for n in 1 2 3 4 5; do
+  DOC="10000000-0000-4000-8000-00000000000$n"
+  CODE="$(status -b "$JAR" "$BASE/api/documents/$DOC/file")"
+  if [[ "$CODE" == "200" ]]; then PREVIEW_OK=$((PREVIEW_OK + 1)); fi
+done
+check "all five seeded previews serve bytes" "$PREVIEW_OK" 5
+
 printf '\n\033[1mInternal fields stay internal\033[0m\n'
 if grep -qE '"(storagePath|storage_path|userId|user_id|rawResponse|passwordHash)"' <<<"$DETAIL"; then
   bad "internal fields are not serialised" "found one in the payload"

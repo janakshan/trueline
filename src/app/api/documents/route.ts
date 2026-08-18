@@ -8,6 +8,7 @@ import { DOCUMENT_STATUSES, MAX_FILE_BYTES, documents, extractions } from "@/lib
 import { decodeCursor, encodeCursor } from "@/lib/documents/cursor";
 import { validateUploadedFile } from "@/lib/documents/file-validation";
 import { toDocumentSummary } from "@/lib/documents/serialize";
+import { env } from "@/lib/env";
 import { AppError, payloadTooLarge } from "@/lib/http/errors";
 import { ok, route } from "@/lib/http/respond";
 import { buildStorageKey, storage } from "@/lib/storage";
@@ -169,6 +170,19 @@ export const POST = route(async (request: Request) => {
   // The id is generated up front so the storage key can be derived from it,
   // which keeps one document's bytes in one prefix and makes deletion trivial.
   const documentId = randomUUID();
+  // Files live in Postgres, so "how big can this get" is a real question with a
+  // real bill attached. The per-file limit does not bound the total — nothing
+  // stops a visitor uploading a 10 MB file sixty times an hour.
+  const storedBytes = await storage.totalBytes();
+  const capBytes = env.STORAGE_TOTAL_CAP_MB * 1024 * 1024;
+  if (storedBytes + file.bytes.byteLength > capBytes) {
+    throw new AppError(
+      "PAYLOAD_TOO_LARGE",
+      "This demo has reached its storage limit. Delete a document to free space — the seeded samples still show the full workflow.",
+      { storedBytes, capBytes },
+    );
+  }
+
   const storagePath = buildStorageKey(documentId, file.filename);
 
   await storage.put(storagePath, file.bytes);
