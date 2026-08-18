@@ -51,6 +51,53 @@ fi
 grep -qi 'x-content-type-options: nosniff' <<<"$HEADERS" && ok "nosniff header present" || bad "nosniff header present" "absent"
 grep -qi 'content-security-policy' <<<"$HEADERS" && ok "CSP header present" || bad "CSP header present" "absent"
 
+
+printf '\n\033[1mCSP does not break hydration\033[0m\n'
+# The failure this guards against: a production CSP of `script-src 'self'` with
+# no nonce blocks the App Router's inline bootstrap scripts, React never
+# hydrates, and every page renders blank. It looks fine in dev, because dev
+# allows 'unsafe-inline'. None of this needs a browser to catch.
+CSP_COUNT="$(grep -ci '^content-security-policy' <<<"$HEADERS" || true)"
+check "exactly one CSP header (two would intersect)" "$CSP_COUNT" 1
+
+# Headers and body must come from the SAME request: the nonce is generated per
+# request, so comparing a header from one fetch against HTML from another never
+# matches — and looks exactly like the bug this is meant to detect.
+SIGNIN_HEAD="$(mktemp)"
+SIGNIN_HTML="$(curl -s -D "$SIGNIN_HEAD" "$BASE/sign-in")"
+BARE="$(grep -o '<script>' <<<"$SIGNIN_HTML" | wc -l | tr -d ' ')"
+
+CSP_LINE="$(grep -i '^content-security-policy' <"$SIGNIN_HEAD" || true)"
+rm -f "$SIGNIN_HEAD"
+SCRIPT_SRC="$(grep -io 'script-src[^;]*' <<<"$CSP_LINE")"
+NONCE="$(grep -o 'nonce-[A-Za-z0-9+/=]*' <<<"$CSP_LINE" | head -1 | cut -d- -f2-)"
+
+if grep -qi 'unsafe-inline' <<<"$SCRIPT_SRC"; then
+  # A dev build. Bare inline scripts are expected and permitted here, so
+  # asserting against them would only produce noise on a local run.
+  printf '  \033[33mSKIP\033[0m  script nonce (dev-mode policy allows unsafe-inline)\n'
+elif [[ -n "$NONCE" ]]; then
+  ok "script-src carries a nonce"
+  check "no inline script left without a nonce" "$BARE" 0
+  COUNT="$(grep -o "<script nonce=\"$NONCE\"" <<<"$SIGNIN_HTML" | wc -l | tr -d ' ')"
+  if [[ "$COUNT" -gt 0 ]]; then
+    ok "inline scripts carry that nonce ($COUNT)"
+  else
+    bad "inline scripts carry that nonce" "none matched"
+  fi
+else
+  bad "script-src carries a nonce" "no nonce and no unsafe-inline — inline scripts will be blocked"
+  bad "inline scripts will execute" "$BARE without a nonce; the page will render blank"
+fi
+
+# Catches an empty server render, and nothing more. It cannot see the blank
+# page caused by blocked hydration — the HTML still contains this text; the
+# browser wipes it when the RSC bootstrap script is refused. The nonce checks
+# above are what actually catch that, which is why they are not merely advisory.
+grep -q 'Try the demo' <<<"$SIGNIN_HTML" \
+  && ok "server rendered the sign-in page" \
+  || bad "server rendered the sign-in page" "no content in the HTML"
+
 printf '\n\033[1mDemo sign-in\033[0m\n'
 LOGIN="$(curl -s -c "$JAR" -D - -o /dev/null -X POST "$BASE/api/auth/demo" -w '%{http_code}')"
 CODE="$(tail -1 <<<"$LOGIN")"

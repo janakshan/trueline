@@ -15,12 +15,13 @@ const nextConfig: NextConfig = {
  * Baseline security headers.
  *
  * `frame-ancestors 'none'` matters specifically here: the review screen is a
- * one-click Approve UI, which is exactly the shape clickjacking targets.
+ * one-click Approve UI, which is exactly the shape clickjacking targets — and
+ * it is set in the CSP, in middleware, alongside the rest of the policy.
  *
- * The CSP allows 'unsafe-inline' for styles because Next injects them, and
- * 'unsafe-eval' in development only for React Fast Refresh. Tightening the
- * script policy further needs nonces, which is real work for a demo — the
- * XSS-relevant control is that React escapes rendered data, verified by test.
+ * ⚠️ The Content-Security-Policy is NOT set here. It needs a per-request nonce
+ * for the App Router's inline bootstrap scripts, so it lives in
+ * src/middleware.ts. Adding a static CSP here would emit a second policy header
+ * and browsers enforce the intersection, which would re-break hydration.
  */
 nextConfig.headers = async () => [
   {
@@ -30,24 +31,6 @@ nextConfig.headers = async () => [
       { key: "X-Frame-Options", value: "DENY" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-      {
-        key: "Content-Security-Policy",
-        value: [
-          "default-src 'self'",
-          process.env.NODE_ENV === "production"
-            ? "script-src 'self'"
-            : "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-          "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data: blob:",
-          "font-src 'self' data:",
-          // The app talks to nothing but itself; the Claude call is server-side.
-          "connect-src 'self'",
-          "object-src 'self'",
-          "base-uri 'none'",
-          "form-action 'self'",
-          "frame-ancestors 'none'",
-        ].join("; "),
-      },
     ],
   },
   {
