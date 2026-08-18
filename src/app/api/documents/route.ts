@@ -4,15 +4,18 @@ import { z } from "zod";
 import { clientKey, enforceRateLimit } from "@/lib/auth/rate-limit";
 import { requireUserId } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
-import { DOCUMENT_STATUSES, documents, extractions } from "@/lib/db/schema";
+import { DOCUMENT_STATUSES, MAX_FILE_BYTES, documents, extractions } from "@/lib/db/schema";
 import { decodeCursor, encodeCursor } from "@/lib/documents/cursor";
 import { validateUploadedFile } from "@/lib/documents/file-validation";
 import { toDocumentSummary } from "@/lib/documents/serialize";
-import { AppError } from "@/lib/http/errors";
+import { AppError, payloadTooLarge } from "@/lib/http/errors";
 import { ok, route } from "@/lib/http/respond";
 import { buildStorageKey, storage } from "@/lib/storage";
 
 export const runtime = "nodejs";
+
+/** Multipart framing around the file itself: boundaries, headers, field names. */
+const MULTIPART_OVERHEAD = 4096;
 
 /**
  * GET /api/documents — the list, and the endpoint the client polls while a
@@ -127,11 +130,26 @@ export const POST = route(async (request: Request) => {
     );
   }
 
+  // Checked before parsing, because the platform rejects an oversized body
+  // before the handler ever sees it — formData() then throws, and "could not
+  // parse the multipart body" is a baffling thing to tell someone whose only
+  // mistake was a 12 MB scan. Content-Length is advisory (a lying client just
+  // fails validateUploadedFile below on the real byte count), so this exists
+  // to produce the right status and a legible message, not to enforce.
+  const declaredLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_FILE_BYTES + MULTIPART_OVERHEAD) {
+    throw payloadTooLarge(
+      `File is larger than the ${Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB limit.`,
+      { limitBytes: MAX_FILE_BYTES, declaredBytes: declaredLength },
+    );
+  }
+
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
     // A truncated or malformed multipart body is a client error, not a crash.
+    // An oversized one was already caught above with a clearer message.
     throw new AppError("VALIDATION_ERROR", "Could not parse the multipart body.");
   }
 
